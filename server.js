@@ -100,7 +100,8 @@ app.post('/api/tours/:id/video', upload.single('video'), (req, res) => {
 })
 
 // Serve the React app through Vite (so one command runs everything)
-const vite = await createVite({ server: { middlewareMode: true }, appType: 'spa' })
+const vite = await createVite({ server: { middlewareMode: true, allowedHosts: true }, appType: 'spa' })
 app.use(vite.middlewares)
 
-app.listen(3000, () => console.log('SeeFirst running at http://localhost:3000'))
+const port = process.env.PORT || 3000
+app.listen(port, () => console.log(`SeeFirst running at http://localhost:${port}`))
