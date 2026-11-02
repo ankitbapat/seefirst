@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Uploaded videos (keep the folder itself)
+uploads/videos/*
+!uploads/videos/.gitkeep
+
+# Local config and logs
+.env
+*.log
+
+# OS / editor files
+.DS_Store
+.vscode/
+.idea/

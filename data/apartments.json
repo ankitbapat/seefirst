@@ -1,0 +1,18 @@
+[
+  {
+    "id": "u101", "propertyId": "p1", "property": "Maple Court Apartments", "address": "120 Maple St, Austin, TX",
+    "unit": "Unit 101", "rent": 1450, "beds": 1, "baths": 1, "sqft": 720, "amenities": "Pool, Gym, Covered parking"
+  },
+  {
+    "id": "u102", "propertyId": "p1", "property": "Maple Court Apartments", "address": "120 Maple St, Austin, TX",
+    "unit": "Unit 102", "rent": 1850, "beds": 2, "baths": 1, "sqft": 950, "amenities": "Pool, Gym, Covered parking"
+  },
+  {
+    "id": "u201", "propertyId": "p2", "property": "Riverside Lofts", "address": "88 River Rd, Austin, TX",
+    "unit": "Unit 201", "rent": 1600, "beds": 1, "baths": 1, "sqft": 780, "amenities": "Rooftop deck, In-unit laundry"
+  },
+  {
+    "id": "u202", "propertyId": "p2", "property": "Riverside Lofts", "address": "88 River Rd, Austin, TX",
+    "unit": "Unit 202", "rent": 2100, "beds": 2, "baths": 2, "sqft": 1050, "amenities": "Rooftop deck, In-unit laundry"
+  }
+]
