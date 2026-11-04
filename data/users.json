@@ -1,8 +1,36 @@
 [
-  { "id": "c1", "role": "customer", "name": "Casey Customer", "email": "customer1@seefirst.test", "phone": "555-0101", "password": "pass" },
-  { "id": "c2", "role": "customer", "name": "Chris Customer", "email": "customer2@seefirst.test", "phone": "555-0102", "password": "pass" },
-  { "id": "s1", "role": "scout", "name": "Sam Scout", "email": "scout1@seefirst.test", "phone": "555-0201", "password": "pass" },
-  { "id": "s2", "role": "scout", "name": "Sky Scout", "email": "scout2@seefirst.test", "phone": "555-0202", "password": "pass" },
-  { "id": "m1", "role": "management", "name": "Maple Court Office", "email": "maple@seefirst.test", "phone": "555-0301", "propertyId": "p1", "password": "pass" },
-  { "id": "m2", "role": "management", "name": "Riverside Lofts Office", "email": "riverside@seefirst.test", "phone": "555-0302", "propertyId": "p2", "password": "pass" }
+  {
+    "id": "m1",
+    "role": "management",
+    "name": "Cortland at Allen Station Office",
+    "email": "cortlandallenstation@seefirst.test",
+    "phone": "555-0301",
+    "propertyId": "p1",
+    "password": "pass"
+  },
+  {
+    "id": "m2",
+    "role": "management",
+    "name": "Cortland at North Plano Office",
+    "email": "cortlandnorthplano@seefirst.test",
+    "phone": "555-0302",
+    "propertyId": "p2",
+    "password": "pass"
+  },
+  {
+    "id": "c1793753258220",
+    "role": "customer",
+    "name": "Ankit Bapat",
+    "email": "ankitbapatjob@gmail.com",
+    "phone": "5859574782",
+    "password": "pass"
+  },
+  {
+    "id": "s1793755148824",
+    "role": "scout",
+    "name": "Ankit Bapat",
+    "email": "bapat.ankit@gmail.com",
+    "phone": "5859574782",
+    "password": "pass"
+  }
 ]

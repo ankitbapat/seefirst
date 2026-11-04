@@ -19,6 +19,18 @@ app.post('/api/login', (req, res) => {
   u ? res.json(u) : res.status(401).json({ error: 'Wrong email or password' })
 })
 
+// New customers and scouts sign up (apartment offices can't register)
+app.post('/api/register', (req, res) => {
+  const { firstName, lastName, phone, email, password } = req.body
+  const role = req.body.role === 'scout' ? 'scout' : 'customer'
+  const users = read('users')
+  if (users.find((u) => u.email === email)) return res.status(400).json({ error: 'Email already registered' })
+  const u = { id: role[0] + Date.now(), role, name: `${firstName} ${lastName}`, email, phone, password }
+  users.push(u)
+  write('users', users)
+  res.json(u)
+})
+
 app.get('/api/apartments', (req, res) => res.json(read('apartments')))
 
 // Each role only sees what it should
@@ -59,7 +71,7 @@ app.post('/api/tours', (req, res) => {
   const tours = read('tours')
   tours.push({
     id: 't' + Date.now(), status: 'Requested',
-    customerId: me.id, customerName: me.name, customerPhone: me.phone,
+    customerId: me.id, customerName: me.name, customerPhone: me.phone, customerEmail: me.email,
     unitId: apt.id, propertyId: apt.propertyId, property: apt.property, address: apt.address, unit: apt.unit,
     from: req.body.from, to: req.body.to,
   })
@@ -103,5 +115,5 @@ app.post('/api/tours/:id/video', upload.single('video'), (req, res) => {
 const vite = await createVite({ server: { middlewareMode: true, allowedHosts: true }, appType: 'spa' })
 app.use(vite.middlewares)
 
-const port = process.env.PORT || 3000
-app.listen(port, () => console.log(`SeeFirst running at http://localhost:${port}`))
+const port = process.env.PORT || 3000 // Render sets PORT; locally it falls back to 3000
+app.listen(port, () => console.log('SeeFirst running on port ' + port))

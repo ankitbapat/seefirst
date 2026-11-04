@@ -17,39 +17,70 @@ async function api(path, user, body, isForm) {
 
 const Badge = ({ status }) => <span className={'badge ' + status}>{status}</span>
 
+// Simple progress line: steps up to the current one get a check mark
+const order = ['Requested', 'Accepted', 'Scheduled', 'Completed']
+const customerSteps = ['Sent to scouts', 'Scout accepted', 'Apartment confirmed', 'Video ready']
+const scoutSteps = ['Sent to apartment', 'Apartment confirmed', 'Video uploaded'] // starts once the scout accepts
+
+function Progress({ steps, status, offset = 0 }) {
+  const current = order.indexOf(status) - offset
+  if (current < 0) return null // Cancelled / Declined just show their badge
+  return (
+    <div className="progress">
+      {steps.map((s, i) => <span key={s} className={i <= current ? 'done' : ''}>{i <= current ? '✓ ' : ''}{s}</span>)}
+    </div>
+  )
+}
+
 const demoLogins = {
-  customer: ['customer1@seefirst.test', 'customer2@seefirst.test'],
-  scout: ['scout1@seefirst.test', 'scout2@seefirst.test'],
-  management: ['(Maple Court) :- maple@seefirst.test', '(Riverside Lofts) :- riverside@seefirst.test'],
+  management: ['cortlandallenstation@seefirst.test (Cortland at Allen Station)', 'cortlandnorthplano@seefirst.test (Cortland at North Plano)'],
 }
 
 function Login({ role, onLogin }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [register, setRegister] = useState(false) // customers and scouts can register
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [phone, setPhone] = useState('')
   const submit = async (e) => {
     e.preventDefault()
-    const res = await fetch('/api/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }),
+    const res = await fetch(register ? '/api/register' : '/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ firstName, lastName, phone, email, password, role }),
     })
-    if (!res.ok) return setError('Wrong email or password')
-    const u = await res.json()
-    u.role === role ? onLogin(u) : setError('This login is not for this page')
+    const data = await res.json()
+    if (!res.ok) return setError(data.error || 'Wrong email or password')
+    data.role === role ? onLogin(data) : setError('This login is not for this page')
   }
   return (
     <main>
       <h2>See the apartment before you move</h2>
-      <p className="muted">Log in as: <b>{role}</b> · <a href="/login">Change</a></p>
+      <p className="muted">Log in as: <b>{role}</b> · <a href="/">Change</a></p>
       <form onSubmit={submit} className="card">
-        <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <input placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        <button>Log in</button>
+        {register && <input required placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />}
+        {register && <input required placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} />}
+        {register && <input required type="tel" placeholder="Phone number" value={phone} onChange={(e) => setPhone(e.target.value)} />}
+        <input required type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input required placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <button>{register ? 'Register' : 'Log in'}</button>
         <p className="error">{error}</p>
+        {role !== 'management' && (
+          <p className="muted">
+            {register ? 'Already have an account? ' : 'New here? '}
+            <a href="#" onClick={(e) => { e.preventDefault(); setError(''); setRegister(!register) }}>
+              {register ? 'Log in' : 'Register'}
+            </a>
+          </p>
+        )}
       </form>
-      <div className="card muted">
-        Demo logins (password: <b>pass</b>)<br />
-        {demoLogins[role].map((l) => <div key={l}>{l}</div>)}
-      </div>
+      {demoLogins[role] && (
+        <div className="card muted">
+          Demo logins (password: <b>pass</b>)<br />
+          {demoLogins[role].map((l) => <div key={l}>{l}</div>)}
+        </div>
+      )}
     </main>
   )
 }
@@ -70,18 +101,25 @@ function Customer({ user, tours, reload }) {
   return (
     <main>
       <h2>Available apartments</h2>
-      <p>
+      <p className="card">
         I'm happy to get my video any time between{' '}
         <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /> and{' '}
         <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
       </p>
       <div className="grid">
         {apts.map((a) => (
-          <div className="card" key={a.id}>
-            <b>{a.property} – {a.unit}</b>
+          <div className="card apt" key={a.id}>
+            <div className="muted">{a.property}</div>
+            <h3>{a.unit}</h3>
+            <div className="price">${a.rent}<span>/mo</span></div>
+            <div className="chips">
+              <span>{a.beds} bd</span><span>{a.baths} ba</span><span>{a.sqft} sqft</span>
+            </div>
             <div className="muted">{a.address}</div>
-            <p>${a.rent}/mo · {a.beds} bd / {a.baths} ba · {a.sqft} sqft<br />{a.amenities}</p>
-            <button onClick={() => request(a.id)}>Request video tour ($20)</button>
+            <div className="chips light">
+              {a.amenities.split(', ').map((x) => <span key={x}>{x}</span>)}
+            </div>
+            <button onClick={() => request(a.id)}>Request video tour · $20</button>
           </div>
         ))}
       </div>
@@ -91,6 +129,7 @@ function Customer({ user, tours, reload }) {
       {tours.map((t) => (
         <div className="card" key={t.id}>
           <b>{t.property} – {t.unit}</b> <Badge status={t.status} />
+          <Progress steps={customerSteps} status={t.status} />
           <div className="muted">Wanted between {t.from} and {t.to}</div>
           {t.scoutName && <div>Scout: {t.scoutName}</div>}
           {t.visitDate && <div>Visit: {t.visitDate}, {t.visitFrom} – {t.visitTo}</div>}
@@ -143,6 +182,7 @@ function Scout({ user, tours, reload }) {
         <div className="card" key={t.id}>
           <b>{t.property} – {t.unit}</b> <Badge status={t.status} />
           <div className="muted">{t.address}</div>
+          <Progress steps={scoutSteps} status={t.status} offset={1} />
           {t.status === 'Accepted' && <div>Waiting for the apartment to pick a time. You offered {t.windowDate}, {t.windowFrom} – {t.windowTo}.</div>}
           {t.visitDate && <div>Visit the apartment on {t.visitDate}, {t.visitFrom} – {t.visitTo}</div>}
           {t.status === 'Scheduled' && <div className="muted">Bring your photo ID and show it to the office on arrival.</div>}
@@ -176,7 +216,7 @@ function Management({ user, tours, reload }) {
       {tours.map((t) => (
         <div className="card" key={t.id}>
           <b>{t.unit}</b> <Badge status={t.status} />
-          <div>Customer: {t.customerName} ({t.customerPhone})</div>
+          <div>Customer: {t.customerName} ({t.customerPhone || t.customerEmail})</div>
           <div>Scout: {t.scoutName} ({t.scoutPhone})</div>
           {(t.status === 'Accepted' || t.status === 'Scheduled') && (
             <div className="muted">The scout will show photo ID when they arrive.</div>
@@ -208,9 +248,8 @@ const path = window.location.pathname.replace(/\/$/, '')
 const role = { '/user': 'customer', '/scout': 'scout', '/apartments': 'management' }[path]
 const Page = { customer: Customer, scout: Scout, management: Management }[role]
 
-// "/" = landing page, "/login" = pick a login, the other three = the role pages
+// "/" (or any unknown URL, like the old /login) = landing page, the other three = the role pages
 export default function App() {
-  if (path === '/login') return <ChooseLogin />
   if (!role) return <Landing />
   return <RoleApp />
 }
@@ -229,22 +268,12 @@ function Landing() {
         <div className="card"><b>2. A scout goes for you</b><br />A local scout accepts and the apartment office confirms a time.</div>
         <div className="card"><b>3. Watch your video</b><br />The scout records the tour and uploads it. $20 per tour.</div>
       </div>
-      <a className="button" href="/login">Log in</a>
-    </main>
-  )
-}
-
-function ChooseLogin() {
-  return (
-    <main className="center">
-      <h1 className="brand">SeeFirst</h1>
-      <h2>Log in as</h2>
+      <h2>Log in</h2>
       <p>
         <a className="button" href="/user">User login</a>{' '}
         <a className="button" href="/scout">Scout login</a>{' '}
         <a className="button" href="/apartments">Apartment login</a>
       </p>
-      <p><a href="/">← Back to home</a></p>
     </main>
   )
 }
