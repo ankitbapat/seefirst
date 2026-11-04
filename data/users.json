@@ -18,19 +18,11 @@
     "password": "pass"
   },
   {
-    "id": "c1793753258220",
-    "role": "customer",
-    "name": "Ankit Bapat",
-    "email": "ankitbapatjob@gmail.com",
-    "phone": "5859574782",
-    "password": "pass"
-  },
-  {
     "id": "s1793755148824",
     "role": "scout",
-    "name": "Ankit Bapat",
-    "email": "bapat.ankit@gmail.com",
-    "phone": "5859574782",
+    "name": "Scout John Doe",
+    "email": "scout@gmail.com",
+    "phone": "5859579999",
     "password": "pass"
   }
 ]
