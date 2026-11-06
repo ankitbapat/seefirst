@@ -9,8 +9,9 @@ This is a bare-minimum prototype, not a production app. It has fake demo data an
 1. **Customer** picks a unit, sets a date range, and requests a video tour ($20 is shown as text only).
 2. **Scout** sees the open request, accepts it, and gives a free time window (for example 8am to 5pm).
 3. **Apartment office** sees the customer and scout contact info, and picks the exact time (for example 10 to 11am).
-4. **Scout** visits, shows photo ID at the office, and uploads one video.
-5. **Customer** watches the video.
+4. **Customer** pays $20 on Venmo and clicks "I've paid". The tour then shows a **Paid** badge for everyone.
+5. **Scout** visits, shows photo ID at the office, and uploads one video. Upload is only possible after the tour is Paid.
+6. **Customer** watches the video.
 
 Customers can cancel a tour until it is completed. The apartment office can decline a tour.
 
@@ -18,14 +19,15 @@ Tour statuses: `Requested` → `Accepted` → `Scheduled` → `Completed`, or `C
 
 ## Run it locally
 
-You need Node.js 18 or newer.
+You need Node.js 18 or newer. SeeFirst is two small apps from one codebase. They run on two ports and share the same `data/` and `uploads/` folders, so a request made by a customer shows up for scouts right away.
 
 ```
 npm install
-npm run dev
+npm run customer   # terminal 1: customers at http://localhost:3000
+npm run staff      # terminal 2: scouts and apartment offices at http://localhost:3001
 ```
 
-Then open http://localhost:3000.
+`npm run dev` is the same as `npm run customer`. Both apps must run on the same machine from the same folder.
 
 If something fails with an `esbuild` message, run `npm install-scripts approve esbuild` and try again.
 
@@ -33,21 +35,32 @@ If something fails with an `esbuild` message, run `npm install-scripts approve e
 
 | URL | Who |
 |---|---|
-| `/` | Landing page with the three login buttons |
-| `/user` | Customer login, registration and dashboard |
-| `/scout` | Scout login, registration and dashboard |
-| `/apartments` | Apartment office login and dashboard |
+| `http://localhost:3000/` | Customer landing page with Log in and Register |
+| `http://localhost:3000/user` | Customer login, registration and dashboard |
+| `http://localhost:3001/` | Staff landing page with the scout and apartment logins |
+| `http://localhost:3001/scout` | Scout login, registration and dashboard |
+| `http://localhost:3001/apartments` | Apartment office login and dashboard |
 
-Each page keeps its own login in the browser, so you can be logged in on all three at the same time in different tabs.
+Each page keeps its own login in the browser.
+
+## Payment (Venmo)
+
+Payment is an honor system with no payment API. When the apartment confirms a time, the customer sees a **Pay $20 on Venmo** button that opens Venmo with the amount and a note filled in, and an **I've paid** button. You check your Venmo yourself, and pay the scout their $15 yourself.
+
+Set your username at the top of `src/App.jsx`:
+
+```js
+const VENMO_HANDLE = 'your-venmo-username'
+```
 
 ## Accounts
 
 - **Customers and scouts** register themselves on their login page (first name, last name, phone, email, password). Any password is accepted.
 - **Apartment offices** cannot register. Two demo accounts are in `data/users.json` (password `pass`):
-  - `maple@seefirst.test` — Cortland at Allen Station
-  - `riverside@seefirst.test` — Cortland at North Plano
+  - `cortlandallenstation@seefirst.test` — Cortland at Allen Station
+  - `cortlandnorthplano@seefirst.test` — Cortland at North Plano
 
-To test the whole flow, register a customer and a scout, request a tour, and then log in as the matching apartment office.
+To test the whole flow, register a customer (port 3000) and a scout (port 3001), request a tour, and then log in as the matching apartment office (port 3001).
 
 ## Project structure
 
@@ -81,13 +94,16 @@ State lives in the three JSON files, which the server reads and writes. Videos a
 | `POST /api/tours` | Customer requests a tour |
 | `POST /api/tours/:id/accept` | Scout accepts and gives a time window |
 | `POST /api/tours/:id/schedule` | Apartment office picks the exact time |
-| `POST /api/tours/:id/video` | Scout uploads the video (marks it Completed) |
+| `POST /api/tours/:id/pay` | Customer says they paid (tour must be Scheduled) |
+| `POST /api/tours/:id/video` | Scout uploads the video, only after Paid (marks it Completed) |
 | `POST /api/tours/:id/cancel` | Customer cancels |
 | `POST /api/tours/:id/decline` | Apartment office declines |
 
 ## Deploying (for demos)
 
-The server runs the Vite dev server inside Express, so one process serves everything. On a host like Render:
+Each app is one Node process that runs the Vite dev server inside Express. Because the two apps share files, they only work together on one machine. On a host like Render only one app runs per service (`npm run dev` starts the customer app), and two separate services would not share data. Sharing across hosts would need the staff app to call the customer app's API, which is not built.
+
+On a host like Render:
 
 - Build command: `npm install`
 - Start command: `npm run dev`
@@ -102,7 +118,8 @@ This is a prototype, so it skips a lot on purpose:
 - No real authentication. The browser sends a user ID the server trusts, and the server does not check roles on every action.
 - Passwords are stored as plain text, and the login response includes the password.
 - Uploaded videos have public links and no size or type limits.
-- No real payments, scout ID verification, notifications or scheduling checks.
+- Payments are not verified: the customer's "I've paid" click is trusted. No scout payouts.
+- No scout ID verification, notifications or scheduling checks.
 - The JSON files can be overwritten if two people act at the same moment.
 - Property names are real, but rent, size and amenities are placeholder data.
 

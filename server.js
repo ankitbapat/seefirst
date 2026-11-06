@@ -3,6 +3,11 @@ import multer from 'multer'
 import fs from 'fs'
 import { createServer as createVite } from 'vite'
 
+// Two apps from one codebase, run on two ports and sharing the same data/ and uploads/ folders:
+//   node server.js customer  -> customers (port 3000)
+//   node server.js staff 3001 -> scouts + apartment offices (port 3001)
+const mode = process.argv[2] === 'staff' ? 'staff' : 'customer'
+
 const app = express()
 app.use(express.json())
 app.use('/videos', express.static('uploads/videos'))
@@ -102,18 +107,38 @@ app.post('/api/tours/:id/schedule', (req, res) => {
   res.json({ ok: true })
 })
 
-// Scout uploads the video -> Completed
+// Customer says they paid the $20 on Venmo (honor system: you check Venmo yourself)
+app.post('/api/tours/:id/pay', (req, res) => {
+  const me = user(req)
+  const tours = read('tours')
+  const t = tours.find((t) => t.id === req.params.id && t.customerId === me.id)
+  if (!t || t.status !== 'Scheduled') return res.status(400).json({ error: "Can't pay for this tour yet" })
+  t.paid = true
+  write('tours', tours)
+  res.json({ ok: true })
+})
+
+// Scout uploads the video -> Completed (only after the customer has paid)
 app.post('/api/tours/:id/video', upload.single('video'), (req, res) => {
   const tours = read('tours')
   const t = tours.find((t) => t.id === req.params.id)
+  if (!t || !t.paid) {
+    if (req.file) fs.unlink(req.file.path, () => {}) // throw away the upload
+    return res.status(400).json({ error: 'The customer has not paid yet' })
+  }
   Object.assign(t, { status: 'Completed', video: req.file.filename })
   write('tours', tours)
   res.json({ ok: true })
 })
 
 // Serve the React app through Vite (so one command runs everything)
-const vite = await createVite({ server: { middlewareMode: true, allowedHosts: true }, appType: 'spa' })
+const vite = await createVite({
+  define: { __APP__: JSON.stringify(mode) }, // tells the React app which pages to show
+  // each app needs its own live-reload port, or the second one complains "Port 24678 is already in use"
+  server: { middlewareMode: true, allowedHosts: true, hmr: { port: mode === 'staff' ? 24679 : 24678 } },
+  appType: 'spa',
+})
 app.use(vite.middlewares)
 
-const port = process.env.PORT || 3000 // Render sets PORT; locally it falls back to 3000
-app.listen(port, () => console.log('SeeFirst running on port ' + port))
+const port = process.argv[3] || process.env.PORT || 3000 // Render sets PORT; locally 3000 (customer) or 3001 (staff)
+app.listen(port, () => console.log(`SeeFirst ${mode} app running on port ${port}`))

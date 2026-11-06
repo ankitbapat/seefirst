@@ -17,6 +17,11 @@ async function api(path, user, body, isForm) {
 
 const Badge = ({ status }) => <span className={'badge ' + status}>{status}</span>
 
+// Payment: customers pay $20 on Venmo. Put YOUR Venmo username here (without the @).
+const VENMO_HANDLE = 'your-venmo-username'
+const venmoLink = (t) =>
+  `https://venmo.com/${VENMO_HANDLE}?txn=pay&amount=20&note=${encodeURIComponent('SeeFirst tour ' + t.unit)}`
+
 // Simple progress line: steps up to the current one get a check mark
 const order = ['Requested', 'Accepted', 'Scheduled', 'Completed']
 const customerSteps = ['Sent to scouts', 'Scout accepted', 'Apartment confirmed', 'Video ready']
@@ -40,7 +45,7 @@ function Login({ role, onLogin }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [register, setRegister] = useState(false) // customers and scouts can register
+  const [register, setRegister] = useState(window.location.search.includes('register')) // customers and scouts can register
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [phone, setPhone] = useState('')
@@ -57,7 +62,7 @@ function Login({ role, onLogin }) {
   return (
     <main>
       <h2>See the apartment before you move</h2>
-      <p className="muted">Log in as: <b>{role}</b> · <a href="/">Change</a></p>
+      <p className="muted">Log in as: <b>{role}</b> · <a href="/">Back</a></p>
       <form onSubmit={submit} className="card">
         {register && <input required placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />}
         {register && <input required placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} />}
@@ -98,6 +103,9 @@ function Customer({ user, tours, reload }) {
   const cancel = async (id) => {
     if (confirm('Cancel this tour?')) { await api(`/tours/${id}/cancel`, user, {}); reload() }
   }
+  const pay = async (id) => {
+    if (confirm('Confirm you sent $20 on Venmo?')) { await api(`/tours/${id}/pay`, user, {}); reload() }
+  }
   return (
     <main>
       <h2>Available apartments</h2>
@@ -128,11 +136,21 @@ function Customer({ user, tours, reload }) {
       {tours.length === 0 && <p className="muted">No tours yet.</p>}
       {tours.map((t) => (
         <div className="card" key={t.id}>
-          <b>{t.property} – {t.unit}</b> <Badge status={t.status} />
+          <b>{t.property} – {t.unit}</b> <Badge status={t.status} />{t.paid && <Badge status="Paid" />}
           <Progress steps={customerSteps} status={t.status} />
           <div className="muted">Wanted between {t.from} and {t.to}</div>
           {t.scoutName && <div>Scout: {t.scoutName}</div>}
           {t.visitDate && <div>Visit: {t.visitDate}, {t.visitFrom} – {t.visitTo}</div>}
+          {t.status === 'Scheduled' && !t.paid && (
+            <div className="pay">
+              <b>The apartment confirmed your tour. Pay $20 to book it.</b>
+              <div className="muted">Send $20 to @{VENMO_HANDLE} on Venmo, then click "I've paid".</div>
+              <p>
+                <a className="button" href={venmoLink(t)} target="_blank" rel="noreferrer">Pay $20 on Venmo</a>{' '}
+                <button onClick={() => pay(t.id)}>I've paid</button>
+              </p>
+            </div>
+          )}
           {t.video && <video controls src={'/videos/' + t.video} />}
           {!['Completed', 'Cancelled', 'Declined'].includes(t.status) && (
             <p><button onClick={() => cancel(t.id)}>Cancel tour</button></p>
@@ -180,13 +198,14 @@ function Scout({ user, tours, reload }) {
       {mine.length === 0 && <p className="muted">Nothing yet.</p>}
       {mine.map((t) => (
         <div className="card" key={t.id}>
-          <b>{t.property} – {t.unit}</b> <Badge status={t.status} />
+          <b>{t.property} – {t.unit}</b> <Badge status={t.status} />{t.paid && <Badge status="Paid" />}
           <div className="muted">{t.address}</div>
           <Progress steps={scoutSteps} status={t.status} offset={1} />
           {t.status === 'Accepted' && <div>Waiting for the apartment to pick a time. You offered {t.windowDate}, {t.windowFrom} – {t.windowTo}.</div>}
           {t.visitDate && <div>Visit the apartment on {t.visitDate}, {t.visitFrom} – {t.visitTo}</div>}
           {t.status === 'Scheduled' && <div className="muted">Bring your photo ID and show it to the office on arrival.</div>}
-          {t.status === 'Scheduled' && (
+          {t.status === 'Scheduled' && !t.paid && <div>Waiting for the customer to pay. Visit once this tour shows Paid.</div>}
+          {t.status === 'Scheduled' && t.paid && (
             <p>Upload video: <input type="file" accept="video/*" onChange={(e) => e.target.files[0] && upload(t.id, e.target.files[0])} /></p>
           )}
           {t.video && <video controls src={'/videos/' + t.video} />}
@@ -235,6 +254,7 @@ function Management({ user, tours, reload }) {
             </>
           )}
           {t.visitDate && <div>Scheduled: {t.visitDate}, {t.visitFrom} – {t.visitTo}</div>}
+          {t.status === 'Scheduled' && <div>{t.paid ? 'Customer has paid. The visit is on.' : 'Waiting for the customer to pay.'}</div>}
           {t.video && <video controls src={'/videos/' + t.video} />}
         </div>
       ))}
@@ -245,7 +265,9 @@ function Management({ user, tours, reload }) {
 // Simple routes: each URL is its own role, with its own saved login,
 // so you can be logged in on all three pages at the same time.
 const path = window.location.pathname.replace(/\/$/, '')
-const role = { '/user': 'customer', '/scout': 'scout', '/apartments': 'management' }[path]
+// Customer app (port 3000) only has /user. Staff app (port 3001) has /scout and /apartments.
+const roles = __APP__ === 'staff' ? { '/scout': 'scout', '/apartments': 'management' } : { '/user': 'customer' }
+const role = roles[path]
 const Page = { customer: Customer, scout: Scout, management: Management }[role]
 
 // "/" (or any unknown URL, like the old /login) = landing page, the other three = the role pages
@@ -255,6 +277,7 @@ export default function App() {
 }
 
 function Landing() {
+  if (__APP__ === 'staff') return <StaffHome />
   return (
     <main className="center">
       <h1 className="brand">SeeFirst</h1>
@@ -268,9 +291,21 @@ function Landing() {
         <div className="card"><b>2. A scout goes for you</b><br />A local scout accepts and the apartment office confirms a time.</div>
         <div className="card"><b>3. Watch your video</b><br />The scout records the tour and uploads it. $20 per tour.</div>
       </div>
-      <h2>Log in</h2>
       <p>
-        <a className="button" href="/user">User login</a>{' '}
+        <a className="button" href="/user">Log in</a>{' '}
+        <a className="button" href="/user?register=1">Register</a>
+      </p>
+    </main>
+  )
+}
+
+// Landing page of the staff app (scouts and apartment offices)
+function StaffHome() {
+  return (
+    <main className="center">
+      <h1 className="brand">SeeFirst Staff</h1>
+      <h2>Scouts and apartment offices</h2>
+      <p>
         <a className="button" href="/scout">Scout login</a>{' '}
         <a className="button" href="/apartments">Apartment login</a>
       </p>

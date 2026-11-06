@@ -24,5 +24,21 @@
     "email": "scout@gmail.com",
     "phone": "5859579999",
     "password": "pass"
+  },
+  {
+    "id": "c1793764490192",
+    "role": "customer",
+    "name": "Ankit Bapat",
+    "email": "ankit@gmail.com",
+    "phone": "5859574782",
+    "password": "pass"
+  },
+  {
+    "id": "c1793934722558",
+    "role": "customer",
+    "name": "Ankit Bapat",
+    "email": "a@gmail.com",
+    "phone": "5859574782",
+    "password": "pass"
   }
 ]
