@@ -1,7 +1,12 @@
 import express from 'express'
 import multer from 'multer'
 import fs from 'fs'
+import { randomInt } from 'crypto'
 import { createServer as createVite } from 'vite'
+import nodemailer from 'nodemailer'
+
+// Settings (Gmail login etc.) come from the .env file in this folder
+try { process.loadEnvFile('.env') } catch (e) { if (e.code !== 'ENOENT') console.log('Could not read .env:', e.message) }
 
 // Two apps from one codebase, run on two ports and sharing the same data/ and uploads/ folders:
 //   node server.js customer  -> customers (port 3000)
@@ -12,6 +17,31 @@ const app = express()
 app.use(express.json())
 app.use('/videos', express.static('uploads/videos'))
 
+const TEST_EMAIL = process.env.TEST_EMAIL || 'ankitbapatjob@gmail.com'
+const OFFICE_EMAILS = { p1: 'allenstation@cortland.com' } // by propertyId
+const emailFor = (propertyId) =>
+  process.env.SEND_TO_APARTMENTS === 'true' ? OFFICE_EMAILS[propertyId] || TEST_EMAIL : TEST_EMAIL
+
+const mailer = process.env.SMTP_USER && process.env.SMTP_PASS
+  ? nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } })
+  : null
+
+// Returns false only if sending really failed. Without SMTP settings the email is printed in the terminal instead.
+async function sendEmail(to, subject, text) {
+  if (!mailer) {
+    console.log(`[Email not sent: SMTP_USER / SMTP_PASS not set]\nTo: ${to}\nSubject: ${subject}\n${text}`)
+    return true
+  }
+  try {
+    await mailer.sendMail({ from: process.env.SMTP_USER, to, subject, text })
+    console.log('Email sent to', to)
+    return true
+  } catch (e) {
+    console.log('Email failed:', e.message)
+    return false
+  }
+}
+
 const read = (f) => JSON.parse(fs.readFileSync(`data/${f}.json`, 'utf8'))
 const write = (f, d) => fs.writeFileSync(`data/${f}.json`, JSON.stringify(d, null, 2))
 const upload = multer({ dest: 'uploads/videos' })
@@ -20,19 +50,43 @@ const upload = multer({ dest: 'uploads/videos' })
 const user = (req) => read('users').find((u) => u.id === req.headers['x-user-id'])
 
 app.post('/api/login', (req, res) => {
-  const u = read('users').find((u) => u.email === req.body.email && u.password === req.body.password)
+  const email = (req.body.email || '').trim().toLowerCase()
+  const u = read('users').find((u) => u.email.toLowerCase() === email && u.password === req.body.password)
   u ? res.json(u) : res.status(401).json({ error: 'Wrong email or password' })
 })
 
-// New customers and scouts sign up (apartment offices can't register)
-app.post('/api/register', (req, res) => {
-  const { firstName, lastName, phone, email, password } = req.body
+// Sign-up in two steps so only the owner of an email can register it (apartment offices can't register).
+// Step 1: check the form, email a 6-digit code. Step 2: the person types the code and the account is created.
+const pending = {} // email -> { form details, code, expires, tries } (kept in memory only)
+
+app.post('/api/register/start', async (req, res) => {
+  const { firstName, lastName, phone, password } = req.body
+  const email = (req.body.email || '').trim().toLowerCase()
   const role = req.body.role === 'scout' ? 'scout' : 'customer'
+  if (!email || !firstName || !lastName || !password) return res.status(400).json({ error: 'Please fill in every field' })
+  if (read('users').find((u) => u.email.toLowerCase() === email)) return res.status(400).json({ error: 'Email already registered' })
+  const code = String(randomInt(100000, 1000000))
+  pending[email] = { role, name: `${firstName} ${lastName}`, phone, password, code, expires: Date.now() + 10 * 60 * 1000, tries: 0 }
+  const sent = await sendEmail(email, 'Your SeeFirst verification code', `Your SeeFirst code is ${code}. It expires in 10 minutes.`)
+  if (!sent) return res.status(500).json({ error: "We couldn't send the email. Check the address and try again." })
+  res.json({ ok: true })
+})
+
+app.post('/api/register/verify', (req, res) => {
+  const email = (req.body.email || '').trim().toLowerCase()
+  const p = pending[email]
+  if (!p || Date.now() > p.expires) return res.status(400).json({ error: 'That code expired. Please start again.' })
+  if (++p.tries > 5) {
+    delete pending[email]
+    return res.status(400).json({ error: 'Too many wrong tries. Please start again.' })
+  }
+  if (String(req.body.code).trim() !== p.code) return res.status(400).json({ error: 'Wrong code' })
   const users = read('users')
-  if (users.find((u) => u.email === email)) return res.status(400).json({ error: 'Email already registered' })
-  const u = { id: role[0] + Date.now(), role, name: `${firstName} ${lastName}`, email, phone, password }
+  if (users.find((u) => u.email.toLowerCase() === email)) return res.status(400).json({ error: 'Email already registered' })
+  const u = { id: p.role[0] + Date.now(), role: p.role, name: p.name, email, phone: p.phone, password: p.password }
   users.push(u)
   write('users', users)
+  delete pending[email]
   res.json(u)
 })
 
@@ -43,7 +97,8 @@ app.get('/api/tours', (req, res) => {
   const me = user(req)
   const tours = read('tours')
   if (me.role === 'customer') return res.json(tours.filter((t) => t.customerId === me.id))
-  if (me.role === 'scout') return res.json(tours.filter((t) => t.status === 'Requested' || t.scoutId === me.id))
+  // scouts see open requests they haven't declined, plus their own tours
+  if (me.role === 'scout') return res.json(tours.filter((t) => (t.status === 'Requested' && !(t.declinedBy || []).includes(me.id)) || t.scoutId === me.id))
   res.json(tours.filter((t) => t.propertyId === me.propertyId && t.scoutId)) // only tours a scout accepted
 })
 
@@ -93,7 +148,28 @@ app.post('/api/tours/:id/accept', (req, res) => {
   Object.assign(t, {
     status: 'Accepted', scoutId: me.id, scoutName: me.name, scoutPhone: me.phone,
     windowDate: req.body.date, windowFrom: req.body.start, windowTo: req.body.end,
+    apartmentEmail: emailFor(t.propertyId),
   })
+  write('tours', tours)
+  sendEmail(
+    emailFor(t.propertyId),
+    `New video tour request: ${t.unit} at ${t.property}`,
+    `A scout has accepted a video tour request for ${t.unit} at ${t.property}.\n\n` +
+      `Customer: ${t.customerName} (${t.customerPhone || t.customerEmail})\n` +
+      `Scout: ${t.scoutName} (${t.scoutPhone})\n` +
+      `Scout is available: ${t.windowDate}, ${t.windowFrom} - ${t.windowTo}\n\n` +
+      `Please log in to SeeFirst to confirm a time. The scout will show photo ID when they arrive.`
+  )
+  res.json({ ok: true })
+})
+
+// Scout declines an open request: it stays open for other scouts, but this scout no longer sees it
+app.post('/api/tours/:id/scout-decline', (req, res) => {
+  const me = user(req)
+  const tours = read('tours')
+  const t = tours.find((t) => t.id === req.params.id)
+  if (!t || t.status !== 'Requested') return res.status(400).json({ error: "Can't decline this request" })
+  t.declinedBy = [...(t.declinedBy || []), me.id]
   write('tours', tours)
   res.json({ ok: true })
 })

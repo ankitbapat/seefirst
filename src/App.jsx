@@ -38,7 +38,7 @@ function Progress({ steps, status, offset = 0 }) {
 }
 
 const demoLogins = {
-  management: ['cortlandallenstation@seefirst.test (Cortland at Allen Station)', 'cortlandnorthplano@seefirst.test (Cortland at North Plano)'],
+  management: ['allenstation@cortland.com (Cortland at Allen Station)'],
 }
 
 function Login({ role, onLogin }) {
@@ -49,30 +49,62 @@ function Login({ role, onLogin }) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [phone, setPhone] = useState('')
+  const [step, setStep] = useState('form') // sign-up: 'form', then 'code' (the emailed 6-digit code)
+  const [code, setCode] = useState('')
   const submit = async (e) => {
     e.preventDefault()
-    const res = await fetch(register ? '/api/register' : '/api/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ firstName, lastName, phone, email, password, role }),
-    })
-    const data = await res.json()
-    if (!res.ok) return setError(data.error || 'Wrong email or password')
-    data.role === role ? onLogin(data) : setError('This login is not for this page')
+    setError('')
+    const post = async (url, body) => {
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      return { ok: res.ok, data: await res.json() }
+    }
+    if (register && step === 'form') {
+      const r = await post('/api/register/start', { firstName, lastName, phone, email, password, role })
+      return r.ok ? setStep('code') : setError(r.data.error)
+    }
+    const r = register ? await post('/api/register/verify', { email, code }) : await post('/api/login', { email, password })
+    if (!r.ok) return setError(r.data.error || 'Wrong email or password')
+    r.data.role === role ? onLogin(r.data) : setError('This login is not for this page')
   }
+  const titles = {
+    customer: [register ? 'Create your account' : 'Welcome back', 'Sign up to request video tours of apartments.', 'Log in to see apartments and your tours.'],
+    scout: [register ? 'Scout sign up' : 'Scout login', 'Create a scout account to accept tour requests.', 'Log in to see new tour requests.'],
+    management: ['Apartment office login', '', 'Log in to manage tour requests for your property.'],
+  }
+  const [title, signupText, loginText] = titles[role]
+  const verifying = register && step === 'code'
   return (
-    <main>
-      <h2>See the apartment before you move</h2>
-      <p className="muted">Log in as: <b>{role}</b> · <a href="/">Back</a></p>
-      <form onSubmit={submit} className="card">
-        {register && <input required placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />}
-        {register && <input required placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} />}
-        {register && <input required type="tel" placeholder="Phone number" value={phone} onChange={(e) => setPhone(e.target.value)} />}
-        <input required type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <input required placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        <button>{register ? 'Register' : 'Log in'}</button>
-        <p className="error">{error}</p>
-        {role !== 'management' && (
-          <p className="muted">
+    <main className="auth">
+      <a className="brand-link" href="/">SeeFirst</a>
+      <form onSubmit={submit} className="card auth-card">
+        <h2>{verifying ? 'Check your email' : title}</h2>
+        <p className="muted">
+          {verifying ? `We sent a 6-digit code to ${email}. It expires in 10 minutes.` : register ? signupText : loginText}
+        </p>
+        {verifying ? (
+          <input required inputMode="numeric" maxLength={6} placeholder="6-digit code" value={code} onChange={(e) => setCode(e.target.value)} />
+        ) : (
+          <>
+            {register && (
+              <div className="row">
+                <input required placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+                <input required placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+              </div>
+            )}
+            {register && <input required type="tel" placeholder="Phone number" value={phone} onChange={(e) => setPhone(e.target.value)} />}
+            <input required type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input required placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </>
+        )}
+        <button>{verifying ? 'Verify and create account' : register ? 'Continue' : 'Log in'}</button>
+        {error && <p className="error">{error}</p>}
+        {verifying && (
+          <p className="switch muted">
+            <a href="#" onClick={(e) => { e.preventDefault(); setError(''); setStep('form') }}>Use a different email</a>
+          </p>
+        )}
+        {role !== 'management' && !verifying && (
+          <p className="switch muted">
             {register ? 'Already have an account? ' : 'New here? '}
             <a href="#" onClick={(e) => { e.preventDefault(); setError(''); setRegister(!register) }}>
               {register ? 'Log in' : 'Register'}
@@ -81,7 +113,7 @@ function Login({ role, onLogin }) {
         )}
       </form>
       {demoLogins[role] && (
-        <div className="card muted">
+        <div className="card muted demo">
           Demo logins (password: <b>pass</b>)<br />
           {demoLogins[role].map((l) => <div key={l}>{l}</div>)}
         </div>
@@ -94,6 +126,8 @@ function Customer({ user, tours, reload }) {
   const [apts, setApts] = useState([])
   const [from, setFrom] = useState(today)
   const [to, setTo] = useState(nextWeek)
+  const [selected, setSelected] = useState('') // which complex is open on the right
+  const [query, setQuery] = useState('') // search box above the complex list
   useEffect(() => { api('/apartments', user).then(setApts) }, [])
 
   const request = async (unitId) => {
@@ -106,41 +140,98 @@ function Customer({ user, tours, reload }) {
   const pay = async (id) => {
     if (confirm('Confirm you sent $20 on Venmo?')) { await api(`/tours/${id}/pay`, user, {}); reload() }
   }
+
+  // group the units under their property
+  const byProperty = {}
+  apts.forEach((a) => { (byProperty[a.property] = byProperty[a.property] || []).push(a) })
+  const names = Object.keys(byProperty)
+  const q = query.trim().toLowerCase()
+  const shown = names.filter((n) => (n + ' ' + byProperty[n][0].address).toLowerCase().includes(q))
+  const current = names.includes(selected) ? selected : names[0]
+  const cur = byProperty[current] || []
+  const bedCounts = [...new Set(cur.map((u) => u.beds))].sort()
+
   return (
     <main>
-      <h2>Available apartments</h2>
-      <p className="card">
-        I'm happy to get my video any time between{' '}
-        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /> and{' '}
-        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-      </p>
-      <div className="grid">
-        {apts.map((a) => (
-          <div className="card apt" key={a.id}>
-            <div className="muted">{a.property}</div>
-            <h3>{a.unit}</h3>
-            <div className="price">${a.rent}<span>/mo</span></div>
-            <div className="chips">
-              <span>{a.beds} bd</span><span>{a.baths} ba</span><span>{a.sqft} sqft</span>
-            </div>
-            <div className="muted">{a.address}</div>
-            <div className="chips light">
-              {a.amenities.split(', ').map((x) => <span key={x}>{x}</span>)}
-            </div>
-            <button onClick={() => request(a.id)}>Request video tour · $20</button>
-          </div>
-        ))}
+      <div className="page-head">
+        <h1>Find your next apartment</h1>
+        <p className="muted">Pick a unit and the dates you'd like your video. A local scout will film the tour for you.</p>
       </div>
 
+      <div className="range">
+        <b>When would you like your video?</b>
+        <span>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <span className="muted">to</span>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        </span>
+      </div>
+
+      {names.length > 0 && (
+        <div className="browse">
+          <div className="complex-side">
+            <input type="search" placeholder="Search by name or city" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <div className="muted">{shown.length} of {names.length} complexes</div>
+            <div className="complex-list">
+              {shown.map((name) => {
+                const units = byProperty[name]
+                return (
+                  <button key={name} className={'complex-item' + (name === current ? ' active' : '')} onClick={() => setSelected(name)}>
+                    <b>{name}</b>
+                    <span>{units[0].address} · from ${Math.min(...units.map((u) => u.rent))}/mo</span>
+                  </button>
+                )
+              })}
+              {shown.length === 0 && <div className="muted">No complexes match.</div>}
+            </div>
+          </div>
+
+          <div className="complex-panel">
+            <h2>{current}</h2>
+            <div className="muted">{cur[0].address} · {cur.length} units available</div>
+            <div className="chips light">
+              {cur[0].amenities.split(', ').map((x) => <span key={x}>{x}</span>)}
+            </div>
+
+            {bedCounts.map((n) => {
+              const units = cur.filter((u) => u.beds === n)
+              return (
+                <details className="beds" key={current + n} open>
+                  <summary>
+                    <span>{n} Bedroom</span>
+                    <span className="muted">{units.length} available · from ${Math.min(...units.map((u) => u.rent))}/mo</span>
+                  </summary>
+                  <div className="unit-grid">
+                    {units.map((a) => (
+                      <div className="unit" key={a.id}>
+                        <h3>{a.unit}</h3>
+                        <div className="price">${a.rent}<span>/mo</span></div>
+                        <div className="stats">{a.beds} bd · {a.baths} ba · {a.sqft} sqft</div>
+                        <button onClick={() => request(a.id)}>Request video tour</button>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       <h2>My tours</h2>
-      {tours.length === 0 && <p className="muted">No tours yet.</p>}
-      {tours.map((t) => (
-        <div className="card" key={t.id}>
-          <b>{t.property} – {t.unit}</b> <Badge status={t.status} />{t.paid && <Badge status="Paid" />}
+      {tours.length === 0 && <div className="card empty">No tours yet. Pick an apartment above to request your first tour.</div>}
+      {[...tours].reverse().map((t) => (
+        <div className={'card tour tour-' + t.status} key={t.id}>
+          <div className="tour-head">
+            <div><b>{t.unit}</b><div className="muted">{t.property} · {t.address}</div></div>
+            <div><Badge status={t.status} />{t.paid && <Badge status="Paid" />}</div>
+          </div>
           <Progress steps={customerSteps} status={t.status} />
-          <div className="muted">Wanted between {t.from} and {t.to}</div>
-          {t.scoutName && <div>Scout: {t.scoutName}</div>}
-          {t.visitDate && <div>Visit: {t.visitDate}, {t.visitFrom} – {t.visitTo}</div>}
+          <div className="details">
+            <div><span>Dates wanted</span>{t.from} to {t.to}</div>
+            {t.scoutName && <div><span>Scout</span>{t.scoutName}</div>}
+            {t.visitDate && <div><span>Visit</span>{t.visitDate}, {t.visitFrom} – {t.visitTo}</div>}
+          </div>
           {t.status === 'Scheduled' && !t.paid && (
             <div className="pay">
               <b>The apartment confirmed your tour. Pay $20 to book it.</b>
@@ -153,7 +244,7 @@ function Customer({ user, tours, reload }) {
           )}
           {t.video && <video controls src={'/videos/' + t.video} />}
           {!['Completed', 'Cancelled', 'Declined'].includes(t.status) && (
-            <p><button onClick={() => cancel(t.id)}>Cancel tour</button></p>
+            <p><button className="outline" onClick={() => cancel(t.id)}>Cancel tour</button></p>
           )}
         </div>
       ))}
@@ -167,6 +258,9 @@ function Scout({ user, tours, reload }) {
   const [end, setEnd] = useState('17:00')
 
   const accept = async (id) => { await api(`/tours/${id}/accept`, user, { date, start, end }); reload() }
+  const decline = async (id) => {
+    if (confirm("Decline this request? You won't see it again.")) { await api(`/tours/${id}/scout-decline`, user, {}); reload() }
+  }
   const upload = async (id, file) => {
     const form = new FormData()
     form.append('video', file)
@@ -190,7 +284,8 @@ function Scout({ user, tours, reload }) {
             <input type="time" value={start} onChange={(e) => setStart(e.target.value)} /> to{' '}
             <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
           </p>
-          <button onClick={() => accept(t.id)}>Accept</button>
+          <button onClick={() => accept(t.id)}>Accept</button>{' '}
+          <button className="outline" onClick={() => decline(t.id)}>Decline</button>
         </div>
       ))}
 
@@ -241,6 +336,7 @@ function Management({ user, tours, reload }) {
             <div className="muted">The scout will show photo ID when they arrive.</div>
           )}
           <div className="muted">{t.address}</div>
+          {t.apartmentEmail && <div className="muted">Apartment email: {t.apartmentEmail}</div>}
           {t.status === 'Accepted' && (
             <>
               <div>Scout is available {t.windowDate}, {t.windowFrom} – {t.windowTo}</div>
@@ -279,23 +375,36 @@ export default function App() {
 function Landing() {
   if (__APP__ === 'staff') return <StaffHome />
   return (
-    <main className="center">
-      <h1 className="brand">SeeFirst</h1>
-      <h2>See the apartment before you move</h2>
-      <p>
-        Moving to a new city and can't visit apartments first? A local scout visits the apartment for you
-        and records a video tour. You watch it from home.
-      </p>
-      <div className="steps">
-        <div className="card"><b>1. Pick an apartment</b><br />Choose a unit and tell us when you'd like your video.</div>
-        <div className="card"><b>2. A scout goes for you</b><br />A local scout accepts and the apartment office confirms a time.</div>
-        <div className="card"><b>3. Watch your video</b><br />The scout records the tour and uploads it. $20 per tour.</div>
-      </div>
-      <p>
-        <a className="button" href="/user">Log in</a>{' '}
-        <a className="button" href="/user?register=1">Register</a>
-      </p>
-    </main>
+    <>
+      <nav>
+        <b>SeeFirst</b>
+        <span><a href="/user">Log in</a><a className="button small" href="/user?register=1">Register</a></span>
+      </nav>
+
+      <section className="hero">
+        <div className="hero-text">
+          <div className="eyebrow">Apartment tours for renters</div>
+          <h1>Tour your next apartment from anywhere.</h1>
+          <p>Moving to a new city? A local scout films the apartment for you. Watch it from home before you rent.</p>
+          <a className="button big white" href="/user?register=1">Get started</a>
+        </div>
+        <div className="video-mock">
+          <div className="screen"><div className="play">▶</div></div>
+          <div className="caption"><b>Apartment tour</b><span>Filmed by a local scout</span></div>
+        </div>
+      </section>
+
+      <main>
+        <h2 className="section-title">How it works</h2>
+        <div className="steps">
+          <div className="card"><span className="num">1</span><br /><b>Pick a unit</b><p>Choose an apartment and your dates.</p></div>
+          <div className="card"><span className="num">2</span><br /><b>A scout visits</b><p>Your scout films the tour on a time the office confirms.</p></div>
+          <div className="card"><span className="num">3</span><br /><b>Watch at home</b><p>Your video shows up in your account.</p></div>
+        </div>
+      </main>
+
+      <footer className="footer">SeeFirst · See first, then decide</footer>
+    </>
   )
 }
 

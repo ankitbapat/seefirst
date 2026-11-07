@@ -2,42 +2,25 @@
   {
     "id": "m1",
     "role": "management",
-    "name": "Cortland at Allen Station Office",
-    "email": "cortlandallenstation@seefirst.test",
+    "name": "Cortland at Allen Station",
+    "email": "allenstation@cortland.com",
     "phone": "555-0301",
     "propertyId": "p1",
     "password": "pass"
   },
   {
-    "id": "m2",
-    "role": "management",
-    "name": "Cortland at North Plano Office",
-    "email": "cortlandnorthplano@seefirst.test",
-    "phone": "555-0302",
-    "propertyId": "p2",
-    "password": "pass"
-  },
-  {
-    "id": "s1793755148824",
-    "role": "scout",
-    "name": "Scout John Doe",
-    "email": "scout@gmail.com",
-    "phone": "5859579999",
-    "password": "pass"
-  },
-  {
-    "id": "c1793764490192",
+    "id": "c1794019634430",
     "role": "customer",
     "name": "Ankit Bapat",
-    "email": "ankit@gmail.com",
+    "email": "bapat.ankit@gmail.com",
     "phone": "5859574782",
     "password": "pass"
   },
   {
-    "id": "c1793934722558",
-    "role": "customer",
+    "id": "s1794019707101",
+    "role": "scout",
     "name": "Ankit Bapat",
-    "email": "a@gmail.com",
+    "email": "ankit.bapat@gmail.com",
     "phone": "5859574782",
     "password": "pass"
   }
