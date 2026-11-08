@@ -2,8 +2,8 @@
   {
     "id": "m1",
     "role": "management",
-    "name": "Cortland at Allen Station Office",
-    "email": "cortlandallenstation@seefirst.test",
+    "name": "Cortland at Allen Station",
+    "email": "allenstation@cortland.com",
     "phone": "555-0301",
     "propertyId": "p1",
     "password": "pass"
