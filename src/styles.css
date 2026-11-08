@@ -31,7 +31,7 @@ input:focus { outline: 2px solid #bfdbfe; border-color: var(--accent); }
 .Scheduled { background: #ede9fe; color: #5b21b6; }
 .Completed { background: #d1fae5; color: #065f46; }
 .Cancelled, .Declined { background: #fee2e2; color: #991b1b; }
-.Paid { background: #d1fae5; color: #065f46; }
+.Approved { background: #d1fae5; color: #065f46; }
 .pay { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px; margin-top: 10px; }
 .pay p { margin: 8px 0 0; }
 

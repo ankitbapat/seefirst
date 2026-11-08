@@ -11,16 +11,18 @@ async function api(path, user, body, isForm) {
     body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
   })
   const data = await res.json()
-  if (!res.ok) alert(data.error || 'Error')
+  if (res.status === 401 && user) { // saved login no longer exists: log out
+    Object.keys(localStorage).filter((k) => k.startsWith('user-')).forEach((k) => localStorage.removeItem(k))
+    alert(data.error)
+    location.reload()
+  } else if (!res.ok) alert(data.error || 'Error')
   return data
 }
 
-const Badge = ({ status }) => <span className={'badge ' + status}>{status}</span>
+// Videos are a full web link (Supabase) or, in local mode, just a file name served from /videos
+const videoSrc = (v) => (v.startsWith('http') ? v : '/videos/' + v)
 
-// Payment: customers pay $20 on Venmo. Put YOUR Venmo username here (without the @).
-const VENMO_HANDLE = 'your-venmo-username'
-const venmoLink = (t) =>
-  `https://venmo.com/${VENMO_HANDLE}?txn=pay&amount=20&note=${encodeURIComponent('SeeFirst tour ' + t.unit)}`
+const Badge = ({ status }) => <span className={'badge ' + status}>{status}</span>
 
 // Simple progress line: steps up to the current one get a check mark
 const order = ['Requested', 'Accepted', 'Scheduled', 'Completed']
@@ -138,7 +140,7 @@ function Customer({ user, tours, reload }) {
     if (confirm('Cancel this tour?')) { await api(`/tours/${id}/cancel`, user, {}); reload() }
   }
   const pay = async (id) => {
-    if (confirm('Confirm you sent $20 on Venmo?')) { await api(`/tours/${id}/pay`, user, {}); reload() }
+    await api(`/tours/${id}/pay`, user, {}); reload()
   }
 
   // group the units under their property
@@ -224,7 +226,7 @@ function Customer({ user, tours, reload }) {
         <div className={'card tour tour-' + t.status} key={t.id}>
           <div className="tour-head">
             <div><b>{t.unit}</b><div className="muted">{t.property} · {t.address}</div></div>
-            <div><Badge status={t.status} />{t.paid && <Badge status="Paid" />}</div>
+            <div><Badge status={t.status} />{t.paid && <Badge status="Approved" />}</div>
           </div>
           <Progress steps={customerSteps} status={t.status} />
           <div className="details">
@@ -234,15 +236,13 @@ function Customer({ user, tours, reload }) {
           </div>
           {t.status === 'Scheduled' && !t.paid && (
             <div className="pay">
-              <b>The apartment confirmed your tour. Pay $20 to book it.</b>
-              <div className="muted">Send $20 to @{VENMO_HANDLE} on Venmo, then click "I've paid".</div>
+              <b>The apartment confirmed your tour. Click Approve so the scout can go ahead.</b>
               <p>
-                <a className="button" href={venmoLink(t)} target="_blank" rel="noreferrer">Pay $20 on Venmo</a>{' '}
-                <button onClick={() => pay(t.id)}>I've paid</button>
+                <button onClick={() => pay(t.id)}>Approve</button>
               </p>
             </div>
           )}
-          {t.video && <video controls src={'/videos/' + t.video} />}
+          {t.video && <video controls src={videoSrc(t.video)} />}
           {!['Completed', 'Cancelled', 'Declined'].includes(t.status) && (
             <p><button className="outline" onClick={() => cancel(t.id)}>Cancel tour</button></p>
           )}
@@ -293,17 +293,17 @@ function Scout({ user, tours, reload }) {
       {mine.length === 0 && <p className="muted">Nothing yet.</p>}
       {mine.map((t) => (
         <div className="card" key={t.id}>
-          <b>{t.property} – {t.unit}</b> <Badge status={t.status} />{t.paid && <Badge status="Paid" />}
+          <b>{t.property} – {t.unit}</b> <Badge status={t.status} />{t.paid && <Badge status="Approved" />}
           <div className="muted">{t.address}</div>
           <Progress steps={scoutSteps} status={t.status} offset={1} />
           {t.status === 'Accepted' && <div>Waiting for the apartment to pick a time. You offered {t.windowDate}, {t.windowFrom} – {t.windowTo}.</div>}
           {t.visitDate && <div>Visit the apartment on {t.visitDate}, {t.visitFrom} – {t.visitTo}</div>}
           {t.status === 'Scheduled' && <div className="muted">Bring your photo ID and show it to the office on arrival.</div>}
-          {t.status === 'Scheduled' && !t.paid && <div>Waiting for the customer to pay. Visit once this tour shows Paid.</div>}
+          {t.status === 'Scheduled' && !t.paid && <div>Waiting for the customer to approve. Visit once this tour is approved.</div>}
           {t.status === 'Scheduled' && t.paid && (
             <p>Upload video: <input type="file" accept="video/*" onChange={(e) => e.target.files[0] && upload(t.id, e.target.files[0])} /></p>
           )}
-          {t.video && <video controls src={'/videos/' + t.video} />}
+          {t.video && <video controls src={videoSrc(t.video)} />}
         </div>
       ))}
     </main>
@@ -350,8 +350,8 @@ function Management({ user, tours, reload }) {
             </>
           )}
           {t.visitDate && <div>Scheduled: {t.visitDate}, {t.visitFrom} – {t.visitTo}</div>}
-          {t.status === 'Scheduled' && <div>{t.paid ? 'Customer has paid. The visit is on.' : 'Waiting for the customer to pay.'}</div>}
-          {t.video && <video controls src={'/videos/' + t.video} />}
+          {t.status === 'Scheduled' && <div>{t.paid ? 'Customer approved. The visit is on.' : 'Waiting for the customer to approve.'}</div>}
+          {t.video && <video controls src={videoSrc(t.video)} />}
         </div>
       ))}
     </main>

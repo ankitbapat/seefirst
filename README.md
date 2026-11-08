@@ -2,15 +2,15 @@
 
 See the apartment before you move. A local scout visits the apartment for you and records a video tour, and you watch it from home.
 
-This is a bare-minimum prototype, not a production app. It has fake demo data and no real payments.
+This is a bare-minimum prototype, not a production app. It has fake demo data.
 
 ## How it works
 
 1. **Customer** picks a unit, sets a date range, and requests a video tour.
 2. **Scout** sees the open request, accepts it with a free time window (for example 8am to 5pm), or declines it. A declined request stays open for other scouts.
 3. **Apartment office** sees the customer and scout contact info, and picks the exact time (for example 10 to 11am).
-4. **Customer** pays $20 on Venmo and clicks "I've paid". The tour then shows a **Paid** badge for everyone.
-5. **Scout** visits, shows photo ID at the office, and uploads one video. Upload is only possible after the tour is Paid.
+4. **Customer** clicks **Approve**. The tour then shows an **Approved** badge for everyone.
+5. **Scout** visits, shows photo ID at the office, and uploads one video. Upload is only possible after the customer approves.
 6. **Customer** watches the video.
 
 Customers can cancel a tour until it is completed. The apartment office can decline a tour.
@@ -43,16 +43,6 @@ If something fails with an `esbuild` message, run `npm install-scripts approve e
 
 Each page keeps its own login in the browser.
 
-## Payment (Venmo)
-
-Payment is an honor system with no payment API. When the apartment confirms a time, the customer sees a **Pay $20 on Venmo** button that opens Venmo with the amount and a note filled in, and an **I've paid** button. You check your Venmo yourself, and pay the scout their $15 yourself.
-
-Set your username at the top of `src/App.jsx`:
-
-```js
-const VENMO_HANDLE = 'your-venmo-username'
-```
-
 ## Email
 
 When a scout accepts a tour, an email goes to the apartment, and the dashboard shows that address on the tour.
@@ -64,6 +54,9 @@ SMTP_USER=your-address@gmail.com
 SMTP_PASS=your-16-letter-app-password
 TEST_EMAIL=ankitbapatjob@gmail.com
 SEND_TO_APARTMENTS=false
+DATABASE_URL=          # optional: Supabase, see Deploying
+SUPABASE_URL=
+SUPABASE_SERVICE_KEY=
 ```
 
 - `SMTP_USER` and `SMTP_PASS` are the Gmail account that sends the emails and its app password. Without them, the email is only printed in the terminal and nothing breaks.
@@ -99,7 +92,7 @@ seefirst/
     └── styles.css
 ```
 
-State lives in the three JSON files, which the server reads and writes. Videos are saved in `uploads/videos/`. To reset the demo, set `data/tours.json` to `[]`.
+In local mode, state lives in the three JSON files and videos in `uploads/videos/`. With Supabase, the data lives in a `docs` table (one JSON document each for users, apartments and tours) and videos in the `videos` bucket. To reset the local demo, set `data/tours.json` to `[]`.
 
 ## API
 
@@ -114,22 +107,37 @@ State lives in the three JSON files, which the server reads and writes. Videos a
 | `POST /api/tours/:id/accept` | Scout accepts and gives a time window |
 | `POST /api/tours/:id/scout-decline` | Scout declines an open request (it stays open for other scouts) |
 | `POST /api/tours/:id/schedule` | Apartment office picks the exact time |
-| `POST /api/tours/:id/pay` | Customer says they paid (tour must be Scheduled) |
-| `POST /api/tours/:id/video` | Scout uploads the video, only after Paid (marks it Completed) |
+| `POST /api/tours/:id/pay` | Customer approves the tour (must be Scheduled) |
+| `POST /api/tours/:id/video` | Scout uploads the video, only after the customer approves (marks it Completed) |
 | `POST /api/tours/:id/cancel` | Customer cancels |
 | `POST /api/tours/:id/decline` | Apartment office declines |
 
-## Deploying (for demos)
+## Deploying (two URLs, shared database)
 
-Each app is one Node process that runs the Vite dev server inside Express. Because the two apps share files, they only work together on one machine. On a host like Render only one app runs per service (`npm run dev` starts the customer app), and two separate services would not share data. Sharing across hosts would need the staff app to call the customer app's API, which is not built.
+Customers and staff get separate URLs. Both apps use one Supabase project: a Postgres database for data and Storage for videos.
 
-On a host like Render:
+**1. Supabase (free)**
+1. Create a project at supabase.com. Remember the database password you choose.
+2. Storage > New bucket > name it `videos` and turn on **Public bucket**.
+3. Project Settings > API: copy the **Project URL** and the **service_role** key (keep it secret).
+4. Click **Connect** at the top, choose **Session pooler**, and copy the connection string. Replace `[YOUR-PASSWORD]` with your database password.
 
-- Build command: `npm install`
-- Start command: `npm run dev`
-- The host sets `PORT`, which the server uses. To send emails, add `SMTP_USER`, `SMTP_PASS`, `TEST_EMAIL` and `SEND_TO_APARTMENTS` in the host's Environment settings (the `.env` file is not uploaded).
+The first time the app starts, it creates the table and copies the starting data from `data/*.json` into the database.
 
-Free hosts usually have temporary disks and put the app to sleep when idle, so registered users, tours and videos can disappear on restart or redeploy.
+**2. Render (free): make two Web Services from the same GitHub repo**
+
+| | Customer service | Staff service |
+|---|---|---|
+| Build command | `npm install` | `npm install` |
+| Start command | `npm run customer` | `npm run staff` |
+
+Add the same environment variables to both: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SMTP_USER`, `SMTP_PASS`, `TEST_EMAIL`, `SEND_TO_APARTMENTS`. (The `.env` file is not uploaded to git.)
+
+Render sets `PORT`, which the server uses.
+
+**Local mode:** leave `DATABASE_URL` empty and the app uses `data/*.json` and `uploads/videos/` as before. To use Supabase locally, put the three Supabase values in `.env`.
+
+Notes: free Render services sleep after 15 minutes idle, and a free Supabase project pauses after about a week without activity (restart it from the Supabase dashboard). Videos are limited to 50 MB.
 
 ## Known limitations
 
@@ -137,10 +145,10 @@ This is a prototype, so it skips a lot on purpose:
 
 - No real authentication. The browser sends a user ID the server trusts, and the server does not check roles on every action.
 - Passwords are stored as plain text, and the login response includes the password.
-- Uploaded videos have public links and no size or type limits.
-- Payments are not verified: the customer's "I've paid" click is trusted. No scout payouts.
+- Uploaded videos have public links, a 50 MB limit and no type checks.
 - No scout ID verification, notifications or scheduling checks.
-- The JSON files can be overwritten if two people act at the same moment.
+- Each list is saved as one document, so two people acting at the same moment can overwrite each other.
+- Sign-up codes are kept in memory, so a restart (or a sleeping free service) cancels a sign-up in progress.
 - Rent, size and amenities in `apartments.json` are placeholder data.
 
 Do not use real personal data in this app.
