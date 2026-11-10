@@ -51,8 +51,6 @@ function Login({ role, onLogin }) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [phone, setPhone] = useState('')
-  const [step, setStep] = useState('form') // sign-up: 'form', then 'code' (the emailed 6-digit code)
-  const [code, setCode] = useState('')
   const submit = async (e) => {
     e.preventDefault()
     setError('')
@@ -60,11 +58,9 @@ function Login({ role, onLogin }) {
       const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       return { ok: res.ok, data: await res.json() }
     }
-    if (register && step === 'form') {
-      const r = await post('/api/register/start', { firstName, lastName, phone, email, password, role })
-      return r.ok ? setStep('code') : setError(r.data.error)
-    }
-    const r = register ? await post('/api/register/verify', { email, code }) : await post('/api/login', { email, password })
+    const r = register
+      ? await post('/api/register', { firstName, lastName, phone, email, password, role })
+      : await post('/api/login', { email, password })
     if (!r.ok) return setError(r.data.error || 'Wrong email or password')
     r.data.role === role ? onLogin(r.data) : setError('This login is not for this page')
   }
@@ -74,38 +70,24 @@ function Login({ role, onLogin }) {
     management: ['Apartment office login', '', 'Log in to manage tour requests for your property.'],
   }
   const [title, signupText, loginText] = titles[role]
-  const verifying = register && step === 'code'
   return (
     <main className="auth">
       <a className="brand-link" href="/">SeeFirst</a>
       <form onSubmit={submit} className="card auth-card">
-        <h2>{verifying ? 'Check your email' : title}</h2>
-        <p className="muted">
-          {verifying ? `We sent a 6-digit code to ${email}. It expires in 10 minutes.` : register ? signupText : loginText}
-        </p>
-        {verifying ? (
-          <input required inputMode="numeric" maxLength={6} placeholder="6-digit code" value={code} onChange={(e) => setCode(e.target.value)} />
-        ) : (
-          <>
-            {register && (
-              <div className="row">
-                <input required placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-                <input required placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
-              </div>
-            )}
-            {register && <input required type="tel" placeholder="Phone number" value={phone} onChange={(e) => setPhone(e.target.value)} />}
-            <input required type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <input required placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </>
+        <h2>{title}</h2>
+        <p className="muted">{register ? signupText : loginText}</p>
+        {register && (
+          <div className="row">
+            <input required placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+            <input required placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+          </div>
         )}
-        <button>{verifying ? 'Verify and create account' : register ? 'Continue' : 'Log in'}</button>
+        {register && <input required type="tel" placeholder="Phone number" value={phone} onChange={(e) => setPhone(e.target.value)} />}
+        <input required type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input required placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <button>{register ? 'Create account' : 'Log in'}</button>
         {error && <p className="error">{error}</p>}
-        {verifying && (
-          <p className="switch muted">
-            <a href="#" onClick={(e) => { e.preventDefault(); setError(''); setStep('form') }}>Use a different email</a>
-          </p>
-        )}
-        {role !== 'management' && !verifying && (
+        {role !== 'management' && (
           <p className="switch muted">
             {register ? 'Already have an account? ' : 'New here? '}
             <a href="#" onClick={(e) => { e.preventDefault(); setError(''); setRegister(!register) }}>

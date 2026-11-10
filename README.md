@@ -61,11 +61,12 @@ SUPABASE_SERVICE_KEY=
 
 - `SMTP_USER` and `SMTP_PASS` are the Gmail account that sends the emails and its app password. Without them, the email is only printed in the terminal and nothing breaks.
 - With `SEND_TO_APARTMENTS=false`, every email goes to `TEST_EMAIL`. Set it to `true` to send to the real office addresses listed in `OFFICE_EMAILS` at the top of `server.js`.
+- On Render's free plan, Gmail/SMTP is blocked, so the apartment email is not sent there (the tour still works).
 - Restart the servers after changing `.env`. Needs Node 20.12 or newer.
 
 ## Accounts
 
-- **Customers and scouts** register themselves on their login page (first name, last name, phone, email, password). We email a 6-digit code to the address, and the account is only created once the code is entered. Any password is accepted. Without the Gmail settings in `.env`, the code is printed in the terminal instead.
+- **Customers and scouts** register themselves on their login page (first name, last name, phone, email, password). There is no email check, so anyone can sign up with any address.
 - **Apartment offices** cannot register. Two demo accounts are in `data/users.json` (password `pass`):
   - `cortlandallenstation@seefirst.test` — Cortland at Allen Station
   - `cortlandnorthplano@seefirst.test` — Cortland at North Plano
@@ -99,8 +100,7 @@ In local mode, state lives in the three JSON files and videos in `uploads/videos
 | Endpoint | What it does |
 |---|---|
 | `POST /api/login` | Log in with email and password |
-| `POST /api/register/start` | Start sign-up: checks the form and emails a 6-digit code |
-| `POST /api/register/verify` | Finish sign-up with the code from the email |
+| `POST /api/register` | Create a customer or scout account |
 | `GET /api/apartments` | List all units |
 | `GET /api/tours` | Tours the logged-in role should see |
 | `POST /api/tours` | Customer requests a tour |
@@ -148,7 +148,6 @@ This is a prototype, so it skips a lot on purpose:
 - Uploaded videos have public links, a 50 MB limit and no type checks.
 - No scout ID verification, notifications or scheduling checks.
 - Each list is saved as one document, so two people acting at the same moment can overwrite each other.
-- Sign-up codes are kept in memory, so a restart (or a sleeping free service) cancels a sign-up in progress.
 - Rent, size and amenities in `apartments.json` are placeholder data.
 
 Do not use real personal data in this app.
