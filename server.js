@@ -4,7 +4,6 @@ import fs from 'fs'
 import path from 'path'
 import pg from 'pg'
 import { createClient } from '@supabase/supabase-js'
-import { randomInt } from 'crypto'
 import { createServer as createVite } from 'vite'
 import nodemailer from 'nodemailer'
 
@@ -79,10 +78,11 @@ const emailFor = (propertyId) =>
   process.env.SEND_TO_APARTMENTS === 'true' ? OFFICE_EMAILS[propertyId] || TEST_EMAIL : TEST_EMAIL
 
 const mailer = process.env.SMTP_USER && process.env.SMTP_PASS
-  ? nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } })
+  ? nodemailer.createTransport({ service: 'gmail', connectionTimeout: 10000, auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } })
   : null
 
 // Returns false only if sending really failed. Without SMTP settings the email is printed in the terminal instead.
+// (Gmail SMTP works on your own computer; Render's free plan blocks it.)
 async function sendEmail(to, subject, text) {
   if (!mailer) {
     console.log(`[Email not sent: SMTP_USER / SMTP_PASS not set]\nTo: ${to}\nSubject: ${subject}\n${text}`)
@@ -104,7 +104,7 @@ const user = async (req) => (await read('users')).find((u) => u.id === req.heade
 
 // Everything except login / sign-up needs a logged-in user that exists
 app.use('/api', h(async (req, res, next) => {
-  if (req.path === '/login' || req.path.startsWith('/register')) return next()
+  if (req.path === '/login' || req.path === '/register') return next()
   req.me = await user(req)
   req.me ? next() : res.status(401).json({ error: 'Please log in again.' })
 }))
@@ -115,38 +115,17 @@ app.post('/api/login', h(async (req, res) => {
   u ? res.json(u) : res.status(401).json({ error: 'Wrong email or password' })
 }))
 
-// Sign-up in two steps so only the owner of an email can register it (apartment offices can't register).
-// Step 1: check the form, email a 6-digit code. Step 2: the person types the code and the account is created.
-const pending = {} // email -> { form details, code, expires, tries } (kept in memory only)
-
-app.post('/api/register/start', h(async (req, res) => {
+// Sign-up for customers and scouts (apartment offices can't register)
+app.post('/api/register', h(async (req, res) => {
   const { firstName, lastName, phone, password } = req.body
   const email = (req.body.email || '').trim().toLowerCase()
   const role = req.body.role === 'scout' ? 'scout' : 'customer'
   if (!email || !firstName || !lastName || !password) return res.status(400).json({ error: 'Please fill in every field' })
-  if ((await read('users')).find((u) => u.email.toLowerCase() === email)) return res.status(400).json({ error: 'Email already registered' })
-  const code = String(randomInt(100000, 1000000))
-  pending[email] = { role, name: `${firstName} ${lastName}`, phone, password, code, expires: Date.now() + 10 * 60 * 1000, tries: 0 }
-  const sent = await sendEmail(email, 'Your SeeFirst verification code', `Your SeeFirst code is ${code}. It expires in 10 minutes.`)
-  if (!sent) return res.status(500).json({ error: "We couldn't send the email. Check the address and try again." })
-  res.json({ ok: true })
-}))
-
-app.post('/api/register/verify', h(async (req, res) => {
-  const email = (req.body.email || '').trim().toLowerCase()
-  const p = pending[email]
-  if (!p || Date.now() > p.expires) return res.status(400).json({ error: 'That code expired. Please start again.' })
-  if (++p.tries > 5) {
-    delete pending[email]
-    return res.status(400).json({ error: 'Too many wrong tries. Please start again.' })
-  }
-  if (String(req.body.code).trim() !== p.code) return res.status(400).json({ error: 'Wrong code' })
   const users = await read('users')
   if (users.find((u) => u.email.toLowerCase() === email)) return res.status(400).json({ error: 'Email already registered' })
-  const u = { id: p.role[0] + Date.now(), role: p.role, name: p.name, email, phone: p.phone, password: p.password }
+  const u = { id: role[0] + Date.now(), role, name: `${firstName} ${lastName}`, email, phone, password }
   users.push(u)
   await write('users', users)
-  delete pending[email]
   res.json(u)
 }))
 
@@ -285,7 +264,9 @@ app.use((err, req, res, next) => {
 
 // ---------- The React app ----------
 // Served through Vite so one command runs everything
+process.env.NODE_ENV = 'development' // Render sets production; Vite's dev server needs development or React complains
 const vite = await createVite({
+  mode: 'development',
   define: { __APP__: JSON.stringify(mode) }, // tells the React app which pages to show
   server: {
     middlewareMode: true,
