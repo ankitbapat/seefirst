@@ -224,24 +224,13 @@ app.post('/api/tours/:id/schedule', h(async (req, res) => {
   res.json({ ok: true })
 }))
 
-// Customer approves the tour (the scout can upload the video only after this)
-app.post('/api/tours/:id/pay', h(async (req, res) => {
-  const me = await user(req)
-  const tours = await read('tours')
-  const t = tours.find((t) => t.id === req.params.id && t.customerId === me.id)
-  if (!t || t.status !== 'Scheduled') return res.status(400).json({ error: "Can't approve this tour yet" })
-  t.paid = true
-  await write('tours', tours)
-  res.json({ ok: true })
-}))
-
-// Scout uploads the video -> Completed (only after the customer has paid)
+// Scout uploads the video -> Completed (once the apartment has confirmed a time)
 app.post('/api/tours/:id/video', upload.single('video'), h(async (req, res) => {
   const tours = await read('tours')
   const t = tours.find((t) => t.id === req.params.id)
-  if (!t || !t.paid || !req.file) {
+  if (!t || t.status !== 'Scheduled' || !req.file) {
     if (req.file) fs.unlink(req.file.path, () => {}) // throw away the upload
-    return res.status(400).json({ error: !req.file ? 'Please choose a video' : 'The customer has not approved yet' })
+    return res.status(400).json({ error: !req.file ? 'Please choose a video' : 'The apartment has not confirmed a time yet' })
   }
   let video = req.file.filename // local mode: the file name, served from /videos
   if (supabase) {

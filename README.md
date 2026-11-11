@@ -9,8 +9,8 @@ This is a bare-minimum prototype, not a production app. It has fake demo data.
 1. **Customer** picks a unit, sets a date range, and requests a video tour.
 2. **Scout** sees the open request, accepts it with a free time window (for example 8am to 5pm), or declines it. A declined request stays open for other scouts.
 3. **Apartment office** sees the customer and scout contact info, and picks the exact time (for example 10 to 11am).
-4. **Customer** clicks **Approve**. The tour then shows an **Approved** badge for everyone.
-5. **Scout** visits, shows photo ID at the office, and uploads one video. Upload is only possible after the customer approves.
+4. *(Payment will be added here later.)*
+5. **Scout** visits, shows photo ID at the office, and uploads one video. Upload is only possible once the apartment has confirmed a time.
 6. **Customer** watches the video.
 
 Customers can cancel a tour until it is completed. The apartment office can decline a tour.
@@ -107,8 +107,7 @@ In local mode, state lives in the three JSON files and videos in `uploads/videos
 | `POST /api/tours/:id/accept` | Scout accepts and gives a time window |
 | `POST /api/tours/:id/scout-decline` | Scout declines an open request (it stays open for other scouts) |
 | `POST /api/tours/:id/schedule` | Apartment office picks the exact time |
-| `POST /api/tours/:id/pay` | Customer approves the tour (must be Scheduled) |
-| `POST /api/tours/:id/video` | Scout uploads the video, only after the customer approves (marks it Completed) |
+| `POST /api/tours/:id/video` | Scout uploads the video, only once the tour is Scheduled (marks it Completed) |
 | `POST /api/tours/:id/cancel` | Customer cancels |
 | `POST /api/tours/:id/decline` | Apartment office declines |
 
