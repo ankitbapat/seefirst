@@ -121,9 +121,6 @@ function Customer({ user, tours, reload }) {
   const cancel = async (id) => {
     if (confirm('Cancel this tour?')) { await api(`/tours/${id}/cancel`, user, {}); reload() }
   }
-  const pay = async (id) => {
-    await api(`/tours/${id}/pay`, user, {}); reload()
-  }
 
   // group the units under their property
   const byProperty = {}
@@ -208,7 +205,7 @@ function Customer({ user, tours, reload }) {
         <div className={'card tour tour-' + t.status} key={t.id}>
           <div className="tour-head">
             <div><b>{t.unit}</b><div className="muted">{t.property} · {t.address}</div></div>
-            <div><Badge status={t.status} />{t.paid && <Badge status="Approved" />}</div>
+            <div><Badge status={t.status} /></div>
           </div>
           <Progress steps={customerSteps} status={t.status} />
           <div className="details">
@@ -216,14 +213,6 @@ function Customer({ user, tours, reload }) {
             {t.scoutName && <div><span>Scout</span>{t.scoutName}</div>}
             {t.visitDate && <div><span>Visit</span>{t.visitDate}, {t.visitFrom} – {t.visitTo}</div>}
           </div>
-          {t.status === 'Scheduled' && !t.paid && (
-            <div className="pay">
-              <b>The apartment confirmed your tour. Click Approve so the scout can go ahead.</b>
-              <p>
-                <button onClick={() => pay(t.id)}>Approve</button>
-              </p>
-            </div>
-          )}
           {t.video && <video controls src={videoSrc(t.video)} />}
           {!['Completed', 'Cancelled', 'Declined'].includes(t.status) && (
             <p><button className="outline" onClick={() => cancel(t.id)}>Cancel tour</button></p>
@@ -275,14 +264,13 @@ function Scout({ user, tours, reload }) {
       {mine.length === 0 && <p className="muted">Nothing yet.</p>}
       {mine.map((t) => (
         <div className="card" key={t.id}>
-          <b>{t.property} – {t.unit}</b> <Badge status={t.status} />{t.paid && <Badge status="Approved" />}
+          <b>{t.property} – {t.unit}</b> <Badge status={t.status} />
           <div className="muted">{t.address}</div>
           <Progress steps={scoutSteps} status={t.status} offset={1} />
           {t.status === 'Accepted' && <div>Waiting for the apartment to pick a time. You offered {t.windowDate}, {t.windowFrom} – {t.windowTo}.</div>}
           {t.visitDate && <div>Visit the apartment on {t.visitDate}, {t.visitFrom} – {t.visitTo}</div>}
           {t.status === 'Scheduled' && <div className="muted">Bring your photo ID and show it to the office on arrival.</div>}
-          {t.status === 'Scheduled' && !t.paid && <div>Waiting for the customer to approve. Visit once this tour is approved.</div>}
-          {t.status === 'Scheduled' && t.paid && (
+          {t.status === 'Scheduled' && (
             <p>Upload video: <input type="file" accept="video/*" onChange={(e) => e.target.files[0] && upload(t.id, e.target.files[0])} /></p>
           )}
           {t.video && <video controls src={videoSrc(t.video)} />}
@@ -332,7 +320,7 @@ function Management({ user, tours, reload }) {
             </>
           )}
           {t.visitDate && <div>Scheduled: {t.visitDate}, {t.visitFrom} – {t.visitTo}</div>}
-          {t.status === 'Scheduled' && <div>{t.paid ? 'Customer approved. The visit is on.' : 'Waiting for the customer to approve.'}</div>}
+          {t.status === 'Scheduled' && <div>The visit is on.</div>}
           {t.video && <video controls src={videoSrc(t.video)} />}
         </div>
       ))}
